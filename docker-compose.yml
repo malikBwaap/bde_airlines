@@ -1,0 +1,53 @@
+#version: '3.8'
+services:
+  db:
+    env_file: 
+      - ./.env
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_PG_USER}
+      POSTGRES_PASSWORD: ${DB_PG_PASSWORD}
+      POSTGRES_DB: ${DB_PG_NAME}
+    volumes:
+      - pgdata:/var/lib/postgresql/data  # ✅ use named volume here
+      - ./db/init:/docker-entrypoint-initdb.d/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-net
+
+  api:
+    env_file: 
+      - ./.env
+    build: ./api
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_PG_HOST: db
+    networks:
+      - app-net
+
+  dash:
+    env_file: 
+      - ./.env
+    build: ./dash_app
+    command: gunicorn app:server -b 0.0.0.0:8050 -w 1 --threads 1
+    ports:
+      - "8050:8050"
+    depends_on:
+      - api
+    networks:
+      - app-net
+
+networks:
+  app-net:
+
+volumes:
+  pgdata:
